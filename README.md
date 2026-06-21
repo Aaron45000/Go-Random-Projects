@@ -2,4 +2,4 @@
 
 A collection of small projects written in Go
 
-Made to help you learn how to use this language
+Made to help me learn how to use this language
