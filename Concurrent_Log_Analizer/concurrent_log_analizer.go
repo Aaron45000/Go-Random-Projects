@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -77,21 +78,23 @@ func processlog(path string, chan1 chan logResult, wg *sync.WaitGroup) {
 func main() {
 
 	// We create a string with the path to the file to read
-	var logpaths string = "logs/"
-	var analizedlogspath string = filepath.Join(logpaths, "analized_logs")
+	logpaths := flag.String("src", "logs/", "Directory where the logs are located")
+	analizedlogspath := flag.String("dst", "analized_logs", "Directory where processed logs are moved")
+	flag.Parse()
+
 	var logs []string
 	totalresults := logResult{infoCount: 0, warnCount: 0, errorCount: 0}
 	channelLog := make(chan logResult)
 	var logwg sync.WaitGroup
 
-	info, err := os.Stat(analizedlogspath)
+	info, err := os.Stat(*analizedlogspath)
 
 	if err != nil {
 
 		if os.IsNotExist(err) {
 
 			fmt.Printf("The analized logs folder does not exists yet \n")
-			os.Mkdir(analizedlogspath, 0755)
+			os.Mkdir(*analizedlogspath, 0755)
 		}
 	} else {
 
@@ -106,7 +109,7 @@ func main() {
 		}
 	}
 
-	dirfiles, err := os.ReadDir(logpaths)
+	dirfiles, err := os.ReadDir(*logpaths)
 	if err != nil {
 
 		fmt.Printf("There was an error reading the folder \n")
@@ -123,7 +126,7 @@ func main() {
 
 		if filepath.Ext(dirfile.Name()) == ".log" {
 
-			logs = append(logs, filepath.Join(logpaths, dirfile.Name()))
+			logs = append(logs, filepath.Join(*logpaths, dirfile.Name()))
 		}
 	}
 
@@ -149,7 +152,7 @@ func main() {
 		totalresults.warnCount += logResult.warnCount
 		totalresults.infoCount += logResult.infoCount
 
-		newpath := filepath.Join(analizedlogspath, "/", filepath.Base(logResult.logpath))
+		newpath := filepath.Join(*analizedlogspath, filepath.Base(logResult.logpath))
 		os.Rename(logResult.logpath, newpath)
 	}
 
