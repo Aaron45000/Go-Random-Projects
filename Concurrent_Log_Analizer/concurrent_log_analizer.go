@@ -10,6 +10,7 @@ import (
 )
 
 type logResult struct {
+	logpath    string
 	infoCount  int
 	warnCount  int
 	errorCount int
@@ -26,7 +27,7 @@ func closeChannel(wg *sync.WaitGroup, resultsChannel chan logResult) {
 func processlog(path string, chan1 chan logResult, wg *sync.WaitGroup) {
 
 	defer wg.Done()
-	result1 := logResult{infoCount: 0, warnCount: 0, errorCount: 0}
+	result1 := logResult{logpath: path, infoCount: 0, warnCount: 0, errorCount: 0}
 	file, err := os.Open(path)
 
 	// If there is an error when opening the file return with an "error" and -5 in infocount
@@ -120,8 +121,10 @@ func main() {
 			continue // if is a folder then continue to the next iteration
 		}
 
-		logs = append(logs, filepath.Join(logpaths, dirfile.Name()))
+		if filepath.Ext(dirfile.Name()) == ".log" {
 
+			logs = append(logs, filepath.Join(logpaths, dirfile.Name()))
+		}
 	}
 
 	logwg.Add(len(logs))
@@ -145,6 +148,9 @@ func main() {
 		totalresults.errorCount += logResult.errorCount
 		totalresults.warnCount += logResult.warnCount
 		totalresults.infoCount += logResult.infoCount
+
+		newpath := filepath.Join(analizedlogspath, "/", filepath.Base(logResult.logpath))
+		os.Rename(logResult.logpath, newpath)
 	}
 
 	if totalresults.infoCount >= 0 {
