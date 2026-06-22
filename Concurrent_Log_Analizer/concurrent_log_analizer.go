@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 )
@@ -75,22 +76,38 @@ func processlog(path string, chan1 chan logResult, wg *sync.WaitGroup) {
 func main() {
 
 	// We create a string with the path to the file to read
-	var logpaths []string
-	logpaths = append(logpaths, "logs/log1.log")
-	logpaths = append(logpaths, "logs/log2.log")
-	logpaths = append(logpaths, "logs/log3.log")
-	logpaths = append(logpaths, "logs/log4.log")
-	logpaths = append(logpaths, "logs/log5.log")
+	var logpaths string = "logs/"
+	var logs []string
 	totalresults := logResult{infoCount: 0, warnCount: 0, errorCount: 0}
 	channelLog := make(chan logResult)
 	var logwg sync.WaitGroup
-	logwg.Add(5)
+
+	dirfiles, err := os.ReadDir(logpaths)
+	if err != nil {
+
+		fmt.Printf("There was an error reading the folder")
+		return
+	}
+
+	// We iterate through the folder to see how many logs there are to process
+	for _, dirfile := range dirfiles { // the _, is so that the index is not used in each iteration.
+
+		if dirfile.IsDir() {
+
+			continue // if is a folder then continue to the next iteration
+		}
+
+		logs = append(logs, filepath.Join(logpaths, dirfile.Name()))
+
+	}
+
+	logwg.Add(len(logs))
 
 	go closeChannel(&logwg, channelLog)
 
-	for i := 0; i < 5; i++ {
+	for i := 0; i < len(logs); i++ {
 
-		go processlog(logpaths[i], channelLog, &logwg)
+		go processlog(logs[i], channelLog, &logwg)
 
 	}
 
