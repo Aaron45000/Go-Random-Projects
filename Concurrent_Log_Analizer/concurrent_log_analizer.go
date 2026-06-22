@@ -77,15 +77,38 @@ func main() {
 
 	// We create a string with the path to the file to read
 	var logpaths string = "logs/"
+	var analizedlogspath string = filepath.Join(logpaths, "analized_logs")
 	var logs []string
 	totalresults := logResult{infoCount: 0, warnCount: 0, errorCount: 0}
 	channelLog := make(chan logResult)
 	var logwg sync.WaitGroup
 
+	info, err := os.Stat(analizedlogspath)
+
+	if err != nil {
+
+		if os.IsNotExist(err) {
+
+			fmt.Printf("The analized logs folder does not exists yet \n")
+			os.Mkdir(analizedlogspath, 0755)
+		}
+	} else {
+
+		if info.IsDir() {
+
+			fmt.Printf("The analized logs directory already exists \n")
+
+		} else {
+
+			fmt.Printf("A file named analized_logs already exists\nplease rename it so that the directory can be created. \n")
+			return
+		}
+	}
+
 	dirfiles, err := os.ReadDir(logpaths)
 	if err != nil {
 
-		fmt.Printf("There was an error reading the folder")
+		fmt.Printf("There was an error reading the folder \n")
 		return
 	}
 
