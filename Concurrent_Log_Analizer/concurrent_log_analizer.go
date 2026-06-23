@@ -17,15 +17,35 @@ type logResult struct {
 	errorCount int
 }
 
-func closeChannel(wg *sync.WaitGroup, resultsChannel chan logResult) {
+func reportWrite(reportChannel chan string, reportFile *os.File) {
+
+	defer reportFile.Close()
+
+	for reportLines := range reportChannel {
+
+		fmt.Fprintln(reportFile, reportLines)
+	}
+}
+
+func closeChannel(wg *sync.WaitGroup, resultsChannel chan logResult, warnChannel chan string, errorChannel chan string) {
 
 	// This function only wait for the waitgroup to finish to close the channel
 	wg.Wait()
 	close(resultsChannel)
+	if warnChannel != nil {
+
+		close(warnChannel)
+
+	}
+	if errorChannel != nil {
+
+		close(errorChannel)
+
+	}
 
 }
 
-func processlog(path string, chan1 chan logResult, wg *sync.WaitGroup) {
+func processlog(path string, chan1 chan logResult, wg *sync.WaitGroup, warnChannel chan string, errorChannel chan string) {
 
 	defer wg.Done()
 	result1 := logResult{logpath: path, infoCount: 0, warnCount: 0, errorCount: 0}
@@ -51,10 +71,24 @@ func processlog(path string, chan1 chan logResult, wg *sync.WaitGroup) {
 
 		line := scanner.Text()
 		if strings.Contains(line, "[WARNING]") {
+
 			result1.warnCount++
+
+			if warnChannel != nil {
+
+				warnChannel <- line
+			}
+
 		}
 		if strings.Contains(line, "[ERROR]") {
+
 			result1.errorCount++
+
+			if errorChannel != nil {
+
+				errorChannel <- line
+			}
+
 		}
 		if strings.Contains(line, "[INFO]") {
 			result1.infoCount++
@@ -79,33 +113,76 @@ func main() {
 
 	// We create a string with the path to the file to read
 	logpaths := flag.String("src", "logs/", "Directory where the logs are located")
-	analizedlogspath := flag.String("dst", "analized_logs", "Directory where processed logs are moved")
+	dstpath := flag.String("dst", "", "Directory where processed logs are moved")
+	warningsflag := flag.Bool("w", false, "This flag tells the program to save warning messages")
+	errorsflag := flag.Bool("e", false, "This flag tells the program to save error messages")
+
 	flag.Parse()
+	analizedlogspath := *dstpath
+
+	reportsDir := filepath.Join(*logpaths, "reports")
+
+	err := os.MkdirAll(reportsDir, 0755) // we create tje directory
+
+	if err != nil { // if there was an error during the creation return
+		fmt.Printf("There was an error creating the reports directory: %v\n", err)
+		return
+	}
 
 	var logs []string
 	totalresults := logResult{infoCount: 0, warnCount: 0, errorCount: 0}
 	channelLog := make(chan logResult)
 	var logwg sync.WaitGroup
+	var warnChannel chan string
+	var errChannel chan string
 
-	info, err := os.Stat(*analizedlogspath)
+	if *warningsflag {
+
+		warnFile, err := os.OpenFile(filepath.Join(*logpaths, "reports", "warnReport.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+
+		if err != nil {
+
+			fmt.Printf("There was an error creating/opening the warnReport file")
+			return
+		}
+
+		warnChannel = make(chan string)
+		go reportWrite(warnChannel, warnFile)
+	}
+	if *errorsflag {
+
+		errorFile, err := os.OpenFile(filepath.Join(*logpaths, "reports", "errorReport.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+
+		if err != nil {
+
+			fmt.Printf("There was an error creating/opening the errorReport file")
+			return
+		}
+		errChannel = make(chan string)
+		go reportWrite(errChannel, errorFile)
+	}
+
+	if analizedlogspath == "" {
+
+		analizedlogspath = filepath.Join(*logpaths, "analized_logs")
+	}
+
+	info, err := os.Stat(analizedlogspath)
 
 	if err != nil {
 
 		if os.IsNotExist(err) {
 
 			fmt.Printf("The analized logs folder does not exists yet \n")
-			os.Mkdir(*analizedlogspath, 0755)
+			os.Mkdir(analizedlogspath, 0755)
 		}
 	} else {
 
-		if info.IsDir() {
-
-			fmt.Printf("The analized logs directory already exists \n")
-
-		} else {
+		if !info.IsDir() {
 
 			fmt.Printf("A file named analized_logs already exists\nplease rename it so that the directory can be created. \n")
 			return
+
 		}
 	}
 
@@ -132,11 +209,11 @@ func main() {
 
 	logwg.Add(len(logs))
 
-	go closeChannel(&logwg, channelLog)
+	go closeChannel(&logwg, channelLog, warnChannel, errChannel)
 
 	for i := 0; i < len(logs); i++ {
 
-		go processlog(logs[i], channelLog, &logwg)
+		go processlog(logs[i], channelLog, &logwg, warnChannel, errChannel)
 
 	}
 
@@ -152,7 +229,7 @@ func main() {
 		totalresults.warnCount += logResult.warnCount
 		totalresults.infoCount += logResult.infoCount
 
-		newpath := filepath.Join(*analizedlogspath, filepath.Base(logResult.logpath))
+		newpath := filepath.Join(analizedlogspath, filepath.Base(logResult.logpath))
 		os.Rename(logResult.logpath, newpath)
 	}
 
